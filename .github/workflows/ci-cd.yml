@@ -9,6 +9,11 @@ env:
   EC2_PUBLIC_IP_1: 18.199.191.210  # Instance 1 Public IP
   EC2_PUBLIC_IP_2: 3.126.246.114   # Instance 2 Public IP
   EC2_PUBLIC_IP_3: 35.159.60.165   # Instance 3 Public IP
+  EC2_PRIVATE_IP_1: 10.0.1.125    
+  EC2_PRIVATE_IP_2: 10.0.2.145    
+  EC2_PRIVATE_IP_3: 10.0.3.125    
+  
+
   SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}  # Define the SSH private key in GitHub Secrets
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}        # GitHub Access Token for login
 
@@ -18,10 +23,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Step 1: Checkout code
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Set up Docker on GitHub Action runner
+      # Step 2: Set up Docker on GitHub Action runner
+      - name: Set up Docker
         run: |
           sudo apt-get update
           sudo apt-get install -y ca-certificates curl gnupg lsb-release
@@ -31,47 +38,59 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
+      # Step 3: Log in to Docker Hub
       - name: Log in to Docker Hub
         run: echo "${{ secrets.DOCKER_HUB_TOKEN }}" | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
 
+      # Step 4: Build and push Docker image to Docker Hub
       - name: Build and Push Docker image
         run: |
           docker build -t arjun02bh/netflixfrontend:v0.0.2 .
           docker push arjun02bh/netflixfrontend:v0.0.2
 
-      - name: Deploy Frontend to EC2 Instances
+      # Step 5: SSH and Deploy to EC2 Instance 1
+      - name: Deploy Frontend to EC2 Instance 1
         run: |
           echo "$SSH_PRIVATE_KEY" > aws_key.pem
           chmod 600 aws_key.pem
-          for IP in $EC2_PUBLIC_IP_1 $EC2_PUBLIC_IP_2 $EC2_PUBLIC_IP_3
-          do
-            ssh -o StrictHostKeyChecking=no -i aws_key.pem ec2-user@$IP \
-            "docker ps -q --filter ancestor=arjun02bh/netflixfrontend:v0.0.2 | grep -q . && echo 'Container already running' || docker run -d -p 3000:3000 -e REACT_APP_BACKEND_URL=http://$IP:8080 arjun02bh/netflixfrontend:v0.0.2"
-          done
+          ssh -o StrictHostKeyChecking=no -i aws_key.pem ec2-user@$EC2_PUBLIC_IP_1 \
+          "sudo docker run -d -p 3000:3000 -e REACT_APP_BACKEND_URL=http://$EC2_PUBLIC_IP_1:8080 arjun02bh/netflixfrontend:v0.0.2"
 
+      # Step 6: SSH and Deploy to EC2 Instance 2
+      - name: Deploy Frontend to EC2 Instance 2
+        run: |
+          ssh -o StrictHostKeyChecking=no -i aws_key.pem ec2-user@$EC2_PUBLIC_IP_2 \
+          "sudo docker run -d -p 3000:3000 -e REACT_APP_BACKEND_URL=http://$EC2_PRIVATE_IP_2:8080 arjun02bh/netflixfrontend:v0.0.2"
+
+      # Step 7: SSH and Deploy to EC2 Instance 3
+      - name: Deploy Frontend to EC2 Instance 3
+        run: |
+          ssh -o StrictHostKeyChecking=no -i aws_key.pem ec2-user@$EC2_PUBLIC_IP_3 \
+          "sudo docker run -d -p 3000:3000 -e REACT_APP_BACKEND_URL=http://$EC2_PRIVATE_IP_3:8080 arjun02bh/netflixfrontend:v0.0.2"
+
+      # Step 8: Deploy and Configure Nginx Load Balancer
       - name: Configure Nginx Load Balancer
         run: |
           ssh -o StrictHostKeyChecking=no -i aws_key.pem ec2-user@$EC2_PUBLIC_IP_1 \
-          "sudo docker pull nginx:latest && \
-          echo '
-          events {
-              worker_connections 1024;
+          sudo docker pull nginx:latest && \
+          echo 'events {
+            worker_connections 1024;
           }
           http {
-              upstream backend {
-                  server $EC2_PUBLIC_IP_1:3000;
-                  server $EC2_PUBLIC_IP_2:3000;
-                  server $EC2_PUBLIC_IP_3:3000;
+            upstream backend {
+              server $EC2_PRIVATE_IP_1:3000;
+              server $EC2_PRIVATE_IP_2:3000;
+              server $EC2_PRIVATE_IP_3:3000;
+            }
+            server {
+              listen 80;
+              location / {
+                proxy_pass http://backend;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
               }
-              server {
-                  listen 80;
-                  location / {
-                      proxy_pass http://backend;
-                      proxy_set_header Host \$host;
-                      proxy_set_header X-Real-IP \$remote_addr;
-                      proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                      proxy_set_header X-Forwarded-Proto \$scheme;
-                  }
-              }
+            }
           }' > ~/nginx.conf && \
-          docker ps -q --filter ancestor=nginx | grep -q . && echo 'Nginx container already running' || sudo docker run -d -p 80:80 -v ~/nginx.conf:/etc/nginx/nginx.conf:ro nginx"
+          sudo docker run -d -p 80:80 -v ~/nginx.conf:/etc/nginx/nginx.conf:ro nginx"
