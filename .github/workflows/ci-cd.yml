@@ -18,12 +18,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout code
       - name: Checkout code
         uses: actions/checkout@v2
 
-      # Step 2: Set up Docker on GitHub Action runner
-      - name: Set up Docker
+      - name: Set up Docker on GitHub Action runner
         run: |
           sudo apt-get update
           sudo apt-get install -y ca-certificates curl gnupg lsb-release
@@ -33,37 +31,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
-      # Step 3: Log in to Docker Hub
       - name: Log in to Docker Hub
         run: echo "${{ secrets.DOCKER_HUB_TOKEN }}" | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
 
-      # Step 4: Build and push Docker image to Docker Hub
       - name: Build and Push Docker image
         run: |
           docker build -t arjun02bh/netflixfrontend:v0.0.2 .
           docker push arjun02bh/netflixfrontend:v0.0.2
 
-      # Step 5: SSH and Deploy to EC2 Instance 1
-      - name: Deploy Frontend to EC2 Instance 1
+      - name: Deploy Frontend to EC2 Instances
         run: |
           echo "$SSH_PRIVATE_KEY" > aws_key.pem
           chmod 600 aws_key.pem
-          ssh -o StrictHostKeyChecking=no -i aws_key.pem ec2-user@$EC2_PUBLIC_IP_1 \
-          "sudo docker run -d -p 3000:3000 -e REACT_APP_BACKEND_URL=http://$EC2_PUBLIC_IP_1:8080 arjun02bh/netflixfrontend:v0.0.2"
+          for IP in $EC2_PUBLIC_IP_1 $EC2_PUBLIC_IP_2 $EC2_PUBLIC_IP_3
+          do
+            ssh -o StrictHostKeyChecking=no -i aws_key.pem ec2-user@$IP \
+            "docker ps -q --filter ancestor=arjun02bh/netflixfrontend:v0.0.2 | grep -q . && echo 'Container already running' || docker run -d -p 3000:3000 -e REACT_APP_BACKEND_URL=http://$IP:8080 arjun02bh/netflixfrontend:v0.0.2"
+          done
 
-      # Step 6: SSH and Deploy to EC2 Instance 2
-      - name: Deploy Frontend to EC2 Instance 2
-        run: |
-          ssh -o StrictHostKeyChecking=no -i aws_key.pem ec2-user@$EC2_PUBLIC_IP_2 \
-          "sudo docker run -d -p 3000:3000 -e REACT_APP_BACKEND_URL=http://$EC2_PUBLIC_IP_2:8080 arjun02bh/netflixfrontend:v0.0.2"
-
-      # Step 7: SSH and Deploy to EC2 Instance 3
-      - name: Deploy Frontend to EC2 Instance 3
-        run: |
-          ssh -o StrictHostKeyChecking=no -i aws_key.pem ec2-user@$EC2_PUBLIC_IP_3 \
-          "sudo docker run -d -p 3000:3000 -e REACT_APP_BACKEND_URL=http://$EC2_PUBLIC_IP_3:8080 arjun02bh/netflixfrontend:v0.0.2"
-
-      # Step 8: Deploy and Configure Nginx Load Balancer
       - name: Configure Nginx Load Balancer
         run: |
           ssh -o StrictHostKeyChecking=no -i aws_key.pem ec2-user@$EC2_PUBLIC_IP_1 \
@@ -74,9 +59,9 @@ jobs:
           }
           http {
               upstream backend {
-                  server $EC2_PRIVATE_IP_1:3000;
-                  server $EC2_PRIVATE_IP_2:3000;
-                  server $EC2_PRIVATE_IP_3:3000;
+                  server $EC2_PUBLIC_IP_1:3000;
+                  server $EC2_PUBLIC_IP_2:3000;
+                  server $EC2_PUBLIC_IP_3:3000;
               }
               server {
                   listen 80;
@@ -89,4 +74,4 @@ jobs:
                   }
               }
           }' > ~/nginx.conf && \
-          sudo docker run -d -p 80:80 -v ~/nginx.conf:/etc/nginx/nginx.conf:ro nginx"
+          docker ps -q --filter ancestor=nginx | grep -q . && echo 'Nginx container already running' || sudo docker run -d -p 80:80 -v ~/nginx.conf:/etc/nginx/nginx.conf:ro nginx"
