@@ -63,12 +63,12 @@ jobs:
         run: |
           echo "$SSH_PRIVATE_KEY" > aws_key.pem
           chmod 600 aws_key.pem
-          ssh -o StrictHostKeyChecking=no -i aws_key.pem ec2-user@$EC2_PUBLIC_IP_1 "docker run -d -p 80:3000 arjun02bh/netflixfrontend:v0.0.2"
+          ssh -o StrictHostKeyChecking=no -i aws_key.pem ec2-user@$EC2_PUBLIC_IP_1 "sudo docker run -d -p 80:3000 arjun02bh/netflixfrontend:v0.0.2"
 
       - name: Deploy to EC2 Instance 2
         run: |
-          ssh -o StrictHostKeyChecking=no -i aws_key.pem ec2-user@$EC2_PUBLIC_IP_2 "docker run -d -p 80:3000 arjun02bh/netflixfrontend:v0.0.2"
+          ssh -o StrictHostKeyChecking=no -i aws_key.pem ec2-user@$EC2_PUBLIC_IP_2 "sudo docker run -d -p 80:3000 arjun02bh/netflixfrontend:v0.0.2"
 
       - name: Deploy to EC2 Instance 3
         run: |
-          ssh -o StrictHostKeyChecking=no -i aws_key.pem ec2-user@$EC2_PUBLIC_IP_3 "docker run -d -p 80:3000 arjun02bh/netflixfrontend:v0.0.2"
+          ssh -o StrictHostKeyChecking=no -i aws_key.pem ec2-user@$EC2_PUBLIC_IP_3 "sudo docker run -d -p 80:3000 arjun02bh/netflixfrontend:v0.0.2"
