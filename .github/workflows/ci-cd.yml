@@ -41,35 +41,34 @@ jobs:
 
           echo "Installing Docker and Docker Compose..."
           sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || { echo "Failed to install Docker. Exiting."; exit 1; }
-      - name: Docker build
-        run:
+
       # Step 2: Log in to Docker Hub
       - name: Log in to Docker Hub
         run: echo "${{ secrets.DOCKER_HUB_TOKEN }}" | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
 
-      # Step 3: Building Docker image from Docker Hub
+      # Step 3: Build Docker image
       - name: Build Docker image
         run: |
           echo "Building the Docker image..."
           docker build -t arjun02bh/netflixfrontend:v0.0.2 .
-              - name: Push Docker image
+
+      # Step 4: Push Docker image
+      - name: Push Docker image
         run: |
           echo "Pushing the Docker image..."
           docker push arjun02bh/netflixfrontend:v0.0.2
 
-
-
-      # Step 4: SSH to the EC2 instances and deploy the frontend
+      # Step 5: SSH to the EC2 instances and deploy the frontend
       - name: Deploy to EC2 Instance 1
         run: |
           echo "$SSH_PRIVATE_KEY" > aws_key.pem
           chmod 600 aws_key.pem
-          ssh -o StrictHostKeyChecking=no -i aws_key.pem ec2-user@$EC2_PUBLIC_IP_1 "docker run -d -p 80:3000 your-dockerhub-username/netflix-clone:latest"
+          ssh -o StrictHostKeyChecking=no -i aws_key.pem ec2-user@$EC2_PUBLIC_IP_1 "docker run -d -p 80:3000 arjun02bh/netflixfrontend:v0.0.2"
 
       - name: Deploy to EC2 Instance 2
         run: |
-          ssh -o StrictHostKeyChecking=no -i aws_key.pem ec2-user@$EC2_PUBLIC_IP_2 "docker run -d -p 80:3000 your-dockerhub-username/netflix-clone:latest"
+          ssh -o StrictHostKeyChecking=no -i aws_key.pem ec2-user@$EC2_PUBLIC_IP_2 "docker run -d -p 80:3000 arjun02bh/netflixfrontend:v0.0.2"
 
       - name: Deploy to EC2 Instance 3
         run: |
-          ssh -o StrictHostKeyChecking=no -i aws_key.pem ec2-user@$EC2_PUBLIC_IP_3 "docker run -d -p 80:3000 your-dockerhub-username/netflix-clone:latest"
+          ssh -o StrictHostKeyChecking=no -i aws_key.pem ec2-user@$EC2_PUBLIC_IP_3 "docker run -d -p 80:3000 arjun02bh/netflixfrontend:v0.0.2"
